@@ -1,0 +1,1 @@
+from HMMEvaluation.ForwardAlgorithm import ForwardAlgorithm as Evaluator

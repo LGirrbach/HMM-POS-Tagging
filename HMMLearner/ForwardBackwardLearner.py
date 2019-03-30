@@ -3,12 +3,11 @@ from HiddenMarkovModel import HiddenMarkovModel as HMM
 import numpy as np
 
 class ForwardBackwardAlgorithm:
-    def __init__(self, possible_states, initial_probabilities, start_state, final_state):
+    def __init__(self, possible_states, possible_observation_symbols, start_state, final_state):
         self.states = tuple(possible_states)
         self.states_with_final_state = tuple(list(self.states) + [final_state])
         self.N = len(self.states)
-        self.initial_probabilities = np.asarray(initial_probabilities)
-        assert len(possible_states) == len(initial_probabilities)
+        self.initial_probabilities = np.empty(len(possible_states))
         self.final_state = final_state
         self.final_state_index = self.states_with_final_state.index(self.final_state)
         self.start_state = start_state
@@ -20,7 +19,35 @@ class ForwardBackwardAlgorithm:
         self.beta = np.empty(0)
         self.zeta = np.empty(0)
         self.gamma = np.empty(0)
-        self.all_observation_symbols = dict()
+        self.all_observation_symbols = possible_observation_symbols
+        self.initialised = False
+    
+    def show(self, k):
+        print('\n'*5)
+        print(self.states)
+        print(self.all_observation_symbols)
+        print(self.current_observation)
+        print()
+        print("Initial Probabilities")
+        print(self.initial_probabilities)
+        print()
+        print("Transition Matrix A:")
+        print(self.a)
+        print()
+        print("Emission Matrix B:")
+        print(self.b)
+        print()
+        print("Forward Probabilities")
+        print(self.alpha[k])
+        print()
+        print("Backward Probabilities")
+        print(self.beta[k])
+        print()
+        print("Zeta Matrices")
+        print(self.zeta[k])
+        print()
+        print("Gamma Matrix")
+        print(self.gamma[k])
 
     def learn_hmm(self, observations):
         self.observations = observations
@@ -28,10 +55,10 @@ class ForwardBackwardAlgorithm:
         for counter in range(10):
             self.e_step()
             self.m_step()
-            print("\rIteration {} finished".format(counter), end='')
+            print("\rIteration {} finished".format(counter+1), end='')
         print()
-        print(self.a)
-        print(self.b)
+        #print(self.a)
+        #print(self.b)
         
         #transition_matrix = np.empty((self.N+2, self.N+2))
         #transition_matrix[:-2, :-1] = self.a
@@ -46,18 +73,16 @@ class ForwardBackwardAlgorithm:
             )
 
     def initialise(self):
-        index = 0
         for k, observation in enumerate(self.observations):
             transformed_observation = []
             for observation_symbol in observation:
-                if observation_symbol not in self.all_observation_symbols:
-                    self.all_observation_symbols[observation_symbol] = index
-                    index += 1
                 transformed_observation.append(self.all_observation_symbols[observation_symbol])
             self.observations[k] = transformed_observation
-        self.uniform_initialise_a_b()
-    
-    def uniform_initialise_a_b(self):
+        if not self.initialised:
+            self.random_initialise_a_b()
+        self.initialised = True
+
+    def random_initialise_a_b(self):
         self.a = np.ones((self.N, self.N+1))
         for i, _ in enumerate(self.a):
             self.a[i] = np.random.dirichlet(self.a[i], 1)
@@ -66,6 +91,16 @@ class ForwardBackwardAlgorithm:
         for i, _ in enumerate(self.b):
             self.b[i] = np.random.dirichlet(self.b[i], 1)
         self.b[self.N] = np.zeros(m)
+    
+    def initialise_from_hmm(self, hmm):
+        assert hmm.a.shape == (self.N, self.N+1)
+        assert hmm.b.shape == (self.N+1, len(self.all_observation_symbols.keys()))
+        assert len(hmm.initial_probabilities) == self.N
+        self.a = hmm.a
+        self.b = hmm.b
+        self.initial_probabilities = hmm.initial_probabilities
+        self.initialised = True
+        
         
     
     def e_step(self):
@@ -77,7 +112,7 @@ class ForwardBackwardAlgorithm:
         self.gamma = np.empty(K, dtype=object)
         print()
         for k, observation in enumerate(self.observations):
-            print("\rProcessing observation {} ({}%)".format(k, round(100*(k/len(self.observations)), 2)), end='')
+            print("\rProcessing observation {} ({}%)".format(k, round(100*((k+1)/len(self.observations)), 2)), end='')
             self.T = len(observation)
             self.current_observation = observation
             self.scaling_coefficients[k] = np.zeros((self.T))
@@ -94,7 +129,10 @@ class ForwardBackwardAlgorithm:
             self.calculate_gamma(k)
             #print("Gamma done for {}".format(k))
             #print()
+            # self.show(k)
         print()
+        #print(self.alpha)
+        #print()
     
     
     def m_step(self):
@@ -104,6 +142,7 @@ class ForwardBackwardAlgorithm:
             for j, state_j in enumerate(self.states_with_final_state):
                 old_aij = self.a[i, j]
                 self.a[i, j] = np.sum(zeta_k[:, i, j].sum() for zeta_k in self.zeta)/np.sum(gamma_k[:, i].sum() for gamma_k in self.gamma)
+                assert not np.isnan(self.a[i, j])
                 deltas.append(abs(old_aij-self.a[i, j]))
         
         # Update b
@@ -116,6 +155,7 @@ class ForwardBackwardAlgorithm:
         for j, state in enumerate(self.states):
             denominator = np.sum(gamma_k[:, j].sum() for gamma_k in self.gamma)
             self.b[j, :] /= denominator
+            assert all(not np.isnan(value) for value in self.b[j, :])
 
     def calculate_zeta(self, k):
         observation_probability = self.alpha[k][:, -1].dot(self.a[:, -1])
@@ -123,8 +163,6 @@ class ForwardBackwardAlgorithm:
             for i, state_i in enumerate(self.states):
                 for j, state_j in enumerate(self.states):
                     self.zeta[k][t, i, j] = self.alpha[k][i, t]*self.a[i, j]*self.b[j, self.current_observation[t+1]]*self.beta[k][j, t+1]
-            for i, state_i in enumerate(self.states):
-                for j, state_j in enumerate(self.states):
                     self.zeta[k][t, i, j] /= observation_probability
 
         for i, state_i in enumerate(self.states):
@@ -149,7 +187,16 @@ class ForwardBackwardAlgorithm:
         for t in range(1, self.T):
             for j, _ in enumerate(self.states):
                 self.alpha[k][j, t] = (self.alpha[k][:, t-1].dot(self.a[:, j]))*self.b[j, self.current_observation[t]]
+                #if self.alpha[k][j, t] == 0:
+                    #print(self.alpha[k][:, t-1], self.a[:, j], self.b[j, self.current_observation[t]])
+                    #print('\n'*3)
             self.scaling_coefficients[k][t] = self.alpha[k][:, t].sum()
+            try:
+                assert self.scaling_coefficients[k][t] > 0
+            except AssertionError:
+                print(self.alpha[k])
+                print(t)
+                raise AssertionError
             self.alpha[k][:, t] /= self.scaling_coefficients[k][t]
         
         # Termination step omitted
@@ -163,7 +210,7 @@ class ForwardBackwardAlgorithm:
         # Recursion
         for t in range(self.T-2, -1, -1):
             for i, _ in enumerate(self.states):
-                self.beta[k][i, t] = (self.beta[k][:, t+1].dot(self.a[i, :-1]))*self.b[i, self.current_observation[t+1]]
+                self.beta[k][i, t] = (self.beta[k][:, t+1]*self.a[i, :-1]*self.b[:-1, self.current_observation[t+1]]).sum()
                 self.beta[k][i, t] /= self.scaling_coefficients[k][t]
         
         # Termination step omitted

@@ -7,6 +7,7 @@ class HiddenMarkovModel:
                  transition_matrix, emission_matrix):
         self.start_state = start_state
         self.final_state = final_state
+        self.unknown_word_symbol = None
         self._states = tuple(possible_states)
         self.observation_to_index_mapping = observations
         self.state_to_index_mapping = {state: i for i, state
@@ -28,6 +29,10 @@ class HiddenMarkovModel:
 
     def __iter__(self):
         return enumerate(self._states)
+    
+    def set_unknown_word_symbol(self, symbol):
+        assert symbol in self.observation_to_index_mapping
+        self.unknown_word_symbol = symbol
 
     def get_transition_probability(self, current_state, next_state):
         if current_state == self.start_state:
@@ -35,17 +40,25 @@ class HiddenMarkovModel:
             return self.initial_probabilities[j]
         i = self.state_to_index_mapping[current_state]
         j = self.state_to_index_mapping[next_state]
-        return self.transition_matrix[i, j]
+        return self._transition_matrix[i, j]
 
     def get_emission_probability(self, state, observation_symbol):
         if observation_symbol not in self. observation_to_index_mapping:
-            raise NotImplementedError
+            print("Unknown symbol:", observation_symbol)
+            if self.unknown_word_symbol is not None:
+                observation_symbol = self.unknown_word_symbol
+            else:
+                raise RuntimeError("Unknown Word symbol not set")
         i = self.state_to_index_mapping[state]
         j = self.observation_to_index_mapping[observation_symbol]
-        return self.emission_matrix[i, j]
+        return self._emission_matrix[i, j]
     
     def get_observation_symbol_index(self, observation_symbol):
-        return self.observation_to_index_mapping[observation_symbol]
+        try:
+            return self.observation_to_index_mapping[observation_symbol]
+        except KeyError:
+            if self.unknown_word_symbol is not None:
+                return self.observation_to_index_mapping[self.unknown_word_symbol]
 
     def get_state_index(self, state):
         return self.state_to_index_mapping[state]

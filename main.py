@@ -13,10 +13,12 @@ import numpy as np
 from HMMLearner import Learner
 from HMMLearner.ForwardBackwardLearner import ForwardBackwardAlgorithm
 from HMMLearner.KneserNeyMLELearner import KneserNeyMLELearner
+from HMMLearner.ExampleLerner import ExampleEMLearner
 from HMMEvaluation import Evaluator
 from HMMDecoder import Decoder
 from DecoderTester import Test
 from MakeTaggingData import MakeTaggingData
+from MakeRandomData import MakeRandomData
 
 
 if __name__ == '__main__':
@@ -24,40 +26,48 @@ if __name__ == '__main__':
     random.seed(seed)
     np.random.seed(seed)
     logging.basicConfig(level=logging.INFO)
-    training_sentences = training_corpus.tagged_sents()
-    test_sentences = test_corpus.tagged_sents()
     START = "<s>"
     STOP = "</s>"
     UNK = "UNK"
     ALL_TAGS = tuple(sorted(load('help/tagsets/upenn_tagset.pickle').keys()))
     create_new_model = True
-    lowercase = True
+    lowercase = False
     
     logging.info("Preparing data")
-    data = MakeTaggingData(3, UNK, lowercase=lowercase)
-    training_sentences = data.get_tagged_training_data()
+    # data = MakeTaggingData(3, UNK, lowercase=lowercase)
+    data = MakeRandomData(6, 15)
+    tagged_training_sentences = data.get_tagged_training_data(20)
+    untagged_training_sentences = data.get_untagged_training_data(50000)
+    
 
     logging.info("Learn Model")
     if create_new_model:
-        # learner = ForwardBackwardAlgorithm(ALL_TAGS, np.random.dirichlet(np.ones(len(ALL_TAGS)), 1)[0], START, STOP)
-        learner = KneserNeyMLELearner(data.states, data.vocabulary, START, STOP)
-        my_hmm = learner.learn_hmm(training_sentences)
+        mle_learner = KneserNeyMLELearner(data.states, data.vocabulary, START, STOP)
+        baum_welch_learner = ForwardBackwardAlgorithm(data.states, data.vocabulary, START, STOP)
+        example_learner = ExampleEMLearner(data.states)
+        # my_hmm = mle_learner.learn_hmm(tagged_training_sentences)
+        # baum_welch_learner.initialise_from_hmm(my_hmm)
+        #my_hmm = baum_welch_learner.learn_hmm(untagged_training_sentences, iterations=20)
+        my_hmm = None
+        example_learner.learn_hmm(untagged_training_sentences)
+        
         with open("HMM_model.dat", "wb") as hmm_file:
             pickle.dump(my_hmm, hmm_file)
     else:
         with open("HMM_model.dat", "rb") as hmm_file:
             my_hmm = pickle.load(hmm_file)
-    my_hmm.set_unknown_word_symbol(UNK)
+    # my_hmm.set_unknown_word_symbol(UNK)
 
     logging.info("Instantiate decoder")
-    decoder = Decoder(my_hmm, START, STOP)
-    logging.info("Check decoder functionality")
-    print(decoder.decode(["i", "went", "to", "town", "."]))
+    # decoder = Decoder(my_hmm, START, STOP)
+    decoder = example_learner
+    #logging.info("Check decoder functionality")
+    #print(decoder.decode(["i", "went", "to", "town", "."]))
     
-    time.sleep(3)
+    # time.sleep(3)
 
     logging.info("Instantiate tester")
-    tester = Test(data.get_test_data())
+    tester = Test(data.get_test_data(1000))
     logging.info("Run tests")
     result = tester.test_decoder(decoder, lowercase=lowercase)
 

@@ -39,8 +39,8 @@ class MakeTaggingData:
         self.word_counts.clear()
         all_words = []
         all_states = []
-        for sentence in self._untagged_sentences:
-            all_words += sentence
+        #for sentence in self._untagged_sentences:
+            #all_words += sentence
         for sentence in self._tagged_sentences_train + self._tagged_sentences_test:
             for word, state in sentence:
                 all_words.append(word)

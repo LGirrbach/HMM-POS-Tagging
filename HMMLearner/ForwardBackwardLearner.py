@@ -49,10 +49,10 @@ class ForwardBackwardAlgorithm:
         print("Gamma Matrix")
         print(self.gamma[k])
 
-    def learn_hmm(self, observations):
+    def learn_hmm(self, observations, iterations=10):
         self.observations = observations
         self.initialise()
-        for counter in range(10):
+        for counter in range(iterations):
             self.e_step()
             self.m_step()
             print("\rIteration {} finished".format(counter+1), end='')
